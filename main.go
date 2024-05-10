@@ -23,7 +23,7 @@ var (
 
 func main() {
 	http.HandleFunc("/posts", postsHandler)
-	http.HandleFunc("/posts/", postHandler)
+	http.HandleFunc("/post/", postHandler)
 
 	fmt.Println("Server is running at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -41,7 +41,7 @@ func postsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func postHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Path[len("/posts/"):])
+	id, err := strconv.Atoi(r.URL.Path[len("/post/"):])
 	if err != nil {
 		http.Error(w, "Invalid post ID", http.StatusBadRequest)
 	}
@@ -50,6 +50,8 @@ func postHandler(w http.ResponseWriter, r *http.Request) {
 		handleGetPost(r, w, id)
 	case "POST":
 		handleDeletePost(r, w, id)
+	case "PUT":
+		handleUpdatePost(r, w, id)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -120,4 +122,31 @@ func handleDeletePost(r *http.Request, w http.ResponseWriter, id int) {
 
 	delete(posts, id)
 	w.WriteHeader(http.StatusOK)
+}
+
+func handleUpdatePost(r *http.Request, w http.ResponseWriter, id int) {
+	postsMu.Lock()
+	defer postsMu.Unlock()
+
+	post, ok := posts[id] // Get the post
+	if !ok {
+		http.Error(w, "Post not found", http.StatusNotFound)
+	}
+
+	body, err := io.ReadAll(r.Body) // Get the body
+	if err != nil {
+		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.Unmarshal(body, &post); err != nil {
+		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		return
+	}
+
+	posts[id] = post
+
+	w.Header().Set("Content-Type", "Application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(post)
 }
